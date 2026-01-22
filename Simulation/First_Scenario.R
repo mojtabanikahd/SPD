@@ -1,12 +1,13 @@
-source('../SPDtrace/Libraray.R')
-source('./editedDtrace.R')
-Rcpp::sourceCpp('../SPDtrace/SolutionPath.cpp')
-Rcpp::sourceCpp('./CrossFDTL.cpp')
+source('./SPDtrace/Libraray.R')
+source('./Simulation/editedDtrace.R')
+Rcpp::sourceCpp('./SPDtrace/SolutionPath.cpp')
+Rcpp::sourceCpp('./Simulation/CrossFDTL.cpp')
 
 library(dplyr)
 library(ggplot2)
 library(stringr)
 library(ggpubr)
+library(Matrix)
 
 #--------------------------------------------------------
 #------------------ Initialization ----------------------
@@ -39,7 +40,7 @@ setting_results <- list();
 #--------------------------------------------------------
 #
 for(setting_index in 1:nrow(settings)) {
-  
+
   # Experiment Setting
   number_of_nodes = settings$number_of_nodes[setting_index]
   number_of_changes = settings$number_of_changes[setting_index]
@@ -64,7 +65,7 @@ for(setting_index in 1:nrow(settings)) {
       number_of_samples = number_of_samples*number_of_sources,
       number_of_changes = number_of_changes
     )
-    
+
     model_precision_A = reference$precision_matrix_A
     model_precision_B = reference$precision_matrix_B
     
