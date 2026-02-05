@@ -64,12 +64,12 @@ List inference_Dtrace_solution_path(NumericMatrix CovA, NumericMatrix CovB, int 
       // Identify the maximum value and corresponding indices.
       for(int i=0; i<nrow*ncol; i++) {
         double absD = std::abs(D[i]);
-        if(absD > maximumValue){
-          maximumValue = absD;
-          maxIndices.clear();
+        if (AreSame(absD, maximumValue)){
           maxIndices.push_back(i);
         }
-        else if(absD == maximumValue){
+        else if(absD > maximumValue){
+          maximumValue = absD;
+          maxIndices.clear();
           maxIndices.push_back(i);
         }
       }
