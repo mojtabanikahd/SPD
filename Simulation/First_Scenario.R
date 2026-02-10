@@ -1,5 +1,6 @@
 source('./SPDtrace/Libraray.R')
 source('./Simulation/editedDtrace.R')
+source('./Simulation/editedFGL.R')
 Rcpp::sourceCpp('./SPDtrace/SolutionPath.cpp')
 Rcpp::sourceCpp('./Simulation/CrossFDTL.cpp')
 
@@ -40,6 +41,7 @@ setting_results <- list();
 #--------------------------------------------------------
 #
 for(setting_index in 1:nrow(settings)) {
+  print(paste("setting index: ", setting_index, " of ", nrow(settings)))
 
   # Experiment Setting
   number_of_nodes = settings$number_of_nodes[setting_index]
@@ -53,11 +55,12 @@ for(setting_index in 1:nrow(settings)) {
   dtrace_solution_path_performances <- list();
   dtrace_solution_path_times <- vector();
   dtrace_performances <- list();
+  FGL_performances <- list();
   crossFDTL_performances <- list();
   
   # Generate tuning parameters
-  tuning_parameters <- 0.1+1.9*(0:number_of_tuning_parameters)/(number_of_tuning_parameters)
-  
+  tuning_parameters <- 0.001+0.799*(0:number_of_tuning_parameters)/(number_of_tuning_parameters)
+
   for(k in 1:number_of_repetition) {
     # Generate Models
     reference <- generate_reference_models(
@@ -65,6 +68,7 @@ for(setting_index in 1:nrow(settings)) {
       number_of_samples = number_of_samples*number_of_sources,
       number_of_changes = number_of_changes
     )
+    print(paste("Repetition number: (", setting_index, " : ", k, ")"))
 
     model_precision_A = reference$precision_matrix_A
     model_precision_B = reference$precision_matrix_B
@@ -99,12 +103,18 @@ for(setting_index in 1:nrow(settings)) {
     # Inference Using D-trace and CrossFDTL Methods
     temp_dtrace_performances <- NULL;
     temp_dtrace_time <- vector();
+    temp_FGL_performances <- NULL;
+    temp_FGL_time <- vector();
     temp_crossFDTL_performances <- NULL;
     temp_crossFDTL_time <- vector();
     
     for(iterator in 1:length(tuning_parameters)) {
       lambda <- tuning_parameters[iterator]
       
+      FGL_results <- edited_FGL(X = sample_covariances,
+                                lambda1 = 0,
+                                lambda2 = lambda/4,
+                                maxiter = maximum_iteration)
       dtrace_results <- edited_Dtrace(X = sample_covariances, lambda = lambda, maxiter = maximum_iteration)
       crossFDTL_results <- CrossFDTL(CovA = sample_covariances[[1]], CovB = sample_covariances[[2]],
                                      lambda = lambda, rho = 0, maxiter = maximum_iteration)
@@ -116,6 +126,13 @@ for(setting_index in 1:nrow(settings)) {
                                                                                     estimated_differences = dtrace_reuslt_adjacency_matrix)));
       }
       
+      for(iteration in 1:length(FGL_results$iteration_times)){
+        FGL_result_adjacency_matrix <- as.matrix(FGL_results$estimated_delta_logs[[iteration]])
+        temp_FGL_performances <- rbind(temp_FGL_performances,
+                                             cbind(iteration, lambda, result_evaluator(real_differences = differential_structure,
+                                                                                       estimated_differences = FGL_result_adjacency_matrix)));
+      }
+      
       for(iteration in 1:length(crossFDTL_results$iteration_times)){
         crossFDTL_result_adjacency_matrix <- as.matrix(crossFDTL_results$estimated_delta_logs[[iteration]])
         temp_crossFDTL_performances <- rbind(temp_crossFDTL_performances,
@@ -124,10 +141,12 @@ for(setting_index in 1:nrow(settings)) {
       }
       
       temp_dtrace_time <- c(temp_dtrace_time, dtrace_results$iteration_times)
+      temp_FGL_time <- c(temp_FGL_time, FGL_results$iteration_times)
       temp_crossFDTL_time <- c(temp_crossFDTL_time, crossFDTL_results$iteration_times)
     }
     
     dtrace_performances[[k]] <- cbind(temp_dtrace_performances, time  = temp_dtrace_time);
+    FGL_performances[[k]] <- cbind(temp_FGL_performances, time  = temp_FGL_time);
     crossFDTL_performances[[k]] <- cbind(temp_crossFDTL_performances, time  = temp_crossFDTL_time);
   }
   
@@ -139,6 +158,10 @@ for(setting_index in 1:nrow(settings)) {
                                                                                   dtrace_performances_data.frame$lambda),
                                         FUN = mean, na.rm=T)
   
+  FGL_performances_data.frame <- bind_rows(FGL_performances)
+  mean_FGL_performances_data.frame <- aggregate(FGL_performances_data.frame, by = list(FGL_performances_data.frame$iteration,
+                                                                                       FGL_performances_data.frame$lambda),
+                                                      FUN = mean, na.rm=T)
   crossFDTL_performances_data.frame <- bind_rows(crossFDTL_performances)
   mean_crossFDTL_performances_data.frame <- aggregate(crossFDTL_performances_data.frame, by = list(crossFDTL_performances_data.frame$iteration,
                                                                                                    crossFDTL_performances_data.frame$lambda),
@@ -191,6 +214,11 @@ for(setting_index in 1:nrow(settings)) {
     performances <- rbind(performances, data.frame(temp_performances,
                                                    type=paste0("D-trace, Iteration ", i)))
     
+    temp_performances <- mean_FGL_performances_data.frame[mean_FGL_performances_data.frame$iteration == i,
+                                                                c(performances_colnames, "time")]
+    performances <- rbind(performances, data.frame(temp_performances,
+                                                   type=paste0("FGL, Iteration ", i)))
+    
     temp_performances <- mean_crossFDTL_performances_data.frame[mean_crossFDTL_performances_data.frame$iteration == i,
                                                                 c(performances_colnames, "time")]
     performances <- rbind(performances, data.frame(temp_performances,
@@ -204,7 +232,21 @@ for(setting_index in 1:nrow(settings)) {
 #--------------------------------------------------------
 #---------------- Visualization the Results -------------
 #--------------------------------------------------------
-#
+algorithm_colors <- c(
+  "D-trace" = "#E69F00",           # Orange
+  "Solution_Path" = "#56B4E9",     # Sky Blue
+  "CrossFDTL Cversion" = "#009E73", # Bluish Green
+  "FGL" = "#F0E442" #Yello
+)
+
+# Define consistent labels
+algorithm_labels <- c(
+  "D-trace" = "APGD D-trace",
+  "Solution_Path" = "Solution Path D-trace",
+  "CrossFDTL Cversion" = "CrossFDTL",
+  "FGL" = "FGL"
+)
+
 performances <- NULL;
 for(setting_index in 1:length(setting_results)){
   performances <- rbind(performances,
@@ -224,6 +266,8 @@ non_solution_path_index <- performances$type == "D-trace, Iteration 1" |
   performances$type == "D-trace, Iteration 5" |
   performances$type == "CrossFDTL Cversion, Iteration 1" |
   performances$type == "CrossFDTL Cversion, Iteration 5" |
+  performances$type == "FGL, Iteration 1" |
+  performances$type == "FGL, Iteration 5" |
   performances$type == "CrossFDTL, Iteration 1" |
   performances$type == "CrossFDTL, Iteration 5" 
 row_index <-  (non_solution_path_index | solution_path_index)
@@ -237,8 +281,9 @@ ROC_plot <- ggplot() +
             data = performances[row_index,], size = 0.5) +
   geom_point(mapping = aes(x = NRecall, y = NPrecision, color=algorithm),
              data = performances[non_solution_path_index,]) +
-  scale_colour_discrete(limits = c("D-trace", "Solution_Path", "CrossFDTL Cversion"),
-                        labels = c("ADMM D-trace", "Solution Path D-trace", "CrossFDTL")) +
+  scale_colour_manual(values = algorithm_colors,
+                      limits = names(algorithm_labels),
+                      labels = algorithm_labels) +
   labs(y="Precision", x="Recall") +
   facet_grid(rows = vars(d), cols = vars(m),
              labeller = label_both) +
@@ -289,10 +334,9 @@ times_plot <- ggplot()+
              mapping = aes(x = as.numeric(iteration), y = time,
                            group=algorithm, color=algorithm)) +
   labs(y="Time (sec.)", x="Number of iterations") +
-  scale_colour_discrete(limits = c("D-trace", "Solution_Path",
-                                   "CrossFDTL Cversion"),
-                        labels = c("ADMM D-trace", "Solution Path D-trace",
-                                   "CrossFDTL")) +
+  scale_colour_manual(values = algorithm_colors,
+                      limits = names(algorithm_labels),
+                      labels = algorithm_labels) +
   facet_grid(rows = vars(d), labeller = label_both) +
   theme_bw() +
   theme(legend.position = "top",
