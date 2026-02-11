@@ -1,5 +1,5 @@
-source('../SPDtrace/Libraray.R')
-Rcpp::sourceCpp('../SPDtrace/SolutionPath.cpp')
+source('./SPDtrace/Libraray.R')
+Rcpp::sourceCpp('./SPDtrace/SolutionPath.cpp')
 
 set.seed(1)
 
@@ -21,13 +21,13 @@ threshold_of_StARS <- 0.001
 # Retrieve name of important genes in platinum sensitivity mentioned by Ting Xu.
 # Data retrieved from the following link.
 # Link: https://github.com/XuTing95/WDtrace/tree/master/Ovarian_cancer
-ov <- read.mat(filename = "./Data/OV_WDtrace.mat")
+ov <- read.mat(filename = "./Ovarian_cancer/Data/OV_WDtrace.mat")
 seven_important_pathway_gene_names <- unlist(ov$OV_WDtrace$Gene)
 
 # Retrieve name of important genes in platinum sensitivity mentioned by Xiao-Fei Zhang.
 # Load data. Data retrieved from the following link.
 # Link: https://github.com/Zhangxf-ccnu/TDJGL
-load("./Data/OV_PI3K.Akt.mTOR.rda")
+load("./Ovarian_cancer/Data/OV_PI3K.Akt.mTOR.rda")
 PI3K_AKT_mTOR_pathway_gene_names <- colnames(OV_PI3K.Akt.mTOR$G450$Drug.Sensitivity)
 
 # Integrate important gene names
@@ -36,7 +36,7 @@ the_most_important_gene_names <- sort(union(seven_important_pathway_gene_names, 
 # Retrieve samples data (Gene expression + labels)
 # Data retrieved from the following link.
 # Link: https://github.com/Zhangxf-ccnu/TDJGL
-load("./Data/OV_GeneExp.Rdata")
+load("./Ovarian_cancer/Data/OV_GeneExp.Rdata")
 
 sensitive_cases_index <- (OV_GeneExp$Patient_drug_information[,"platinum_status"] == "Sensitive")
 resistant_cases_index <- (OV_GeneExp$Patient_drug_information[,"platinum_status"] == "Resistant")
@@ -120,7 +120,7 @@ g <- graph(edges = the_most_important_gene_names[from_gene], directed = F)
 
 deg <- degree(g, mode = "all")
 
-pdf("./Results/DifferentialNetwork.pdf", width = 4)
+pdf("./Ovarian_cancer/Results/DifferentialNetwork.pdf", width = 4)
 print(plot(g, vertex.size=deg*5, vertex.label.cex=0.25,
            vertex.label.color="black",
            vertex.color= c(adjustcolor("green", alpha.f = 0.1),
@@ -136,7 +136,7 @@ dev.off()
 #--------------------------------------------------------
 # 
 # platinum_resistent_genes retrieved from http://ptrc-ddr.cptac-data-view.org/#/
-platinum_resistent_genes <- read_excel("./Data/Platinum_Resistent_Genes.xlsx")
+platinum_resistent_genes <- read_excel("./Ovarian_cancer/Data/Platinum_Resistent_Genes.xlsx")
 PR_genes <- platinum_resistent_genes$`HUGO Gene symbol`
 PR0 = fisher_test(the_most_important_gene_names, names(deg)[deg>0], PR_genes)
 PR1 = fisher_test(the_most_important_gene_names, names(deg)[deg>1], PR_genes)
