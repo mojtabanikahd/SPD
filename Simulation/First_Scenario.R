@@ -279,8 +279,8 @@ performances$iteration[performances$type != "Solution_Path"] <- sapply(str_split
 ROC_plot <- ggplot() +
   geom_line(mapping = aes(x = NRecall, y = NPrecision, color=algorithm, linetype =iteration),
             data = performances[row_index,], size = 0.5) +
-  geom_point(mapping = aes(x = NRecall, y = NPrecision, color=algorithm),
-             data = performances[non_solution_path_index,]) +
+  # geom_point(mapping = aes(x = NRecall, y = NPrecision, color=algorithm),
+  #            data = performances[non_solution_path_index,]) +
   scale_colour_manual(values = algorithm_colors,
                       limits = names(algorithm_labels),
                       labels = algorithm_labels) +
@@ -347,9 +347,10 @@ times_plot <- ggplot()+
 print(times_plot)
 
 
-ggarrange(ROC_plot, times_plot, 
+final_performance_plot <- ggarrange(ROC_plot, times_plot, 
           common.legend = T,
           # legend="bottom",
           labels = c("A", "B"),
           ncol = 2, nrow = 1, widths = c(2,1))
+ggsave("./Simulation/Results/precision_vs_recall.pdf", plot = final_performance_plot, width = 10, height = 5)
 
