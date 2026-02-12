@@ -140,3 +140,102 @@ platinum_resistent_genes <- read_excel("./Ovarian_cancer/Data/Platinum_Resistent
 PR_genes <- platinum_resistent_genes$`HUGO Gene symbol`
 PR0 = fisher_test(the_most_important_gene_names, names(deg)[deg>0], PR_genes)
 PR1 = fisher_test(the_most_important_gene_names, names(deg)[deg>1], PR_genes)
+
+
+#--------------------------------------------------------
+#----------------- Enrichment Analysis ------------------
+#--------------------------------------------------------
+# 
+save.image(file = "./Ovarian_cancer/Data/temp_output_ovarian.RData")
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ReactomePA)
+
+network_genes <- names(deg)
+background_genes <- the_most_important_gene_names
+
+network_entrez <- bitr(
+  network_genes,
+  fromType = "SYMBOL",
+  toType = "ENTREZID",
+  OrgDb = org.Hs.eg.db
+)
+
+background_entrez <- bitr(
+  background_genes,
+  fromType = "SYMBOL",
+  toType = "ENTREZID",
+  OrgDb = org.Hs.eg.db
+)
+
+################## Reactome pathways
+ereact <- enrichPathway(
+  gene          = network_entrez$ENTREZID,
+  universe      = background_entrez$ENTREZID,
+  pAdjustMethod = "BH",
+  qvalueCutoff  = 0.05,
+  readable      = TRUE
+)
+
+################## DoRothEA pathways
+library(dorothea)
+library(viper)
+
+data(dorothea_hs, package = "dorothea")
+
+dorothea_regulons <- dorothea_hs %>%
+  filter(confidence %in% c("A","B"))
+
+enrich_tf <- enricher(
+  gene = network_genes,
+  universe = background_genes,
+  TERM2GENE = dorothea_regulons %>% select(tf, target),
+  pAdjustMethod = "BH"
+)
+
+
+foxm1_targets <- dorothea_regulons %>%
+  filter(tf == "FOXM1")
+
+foxm1_in_network <- intersect(network_genes, foxm1_targets$target)
+
+
+
+## Check if these are enriched for Cell Cycle genes
+msig_h <- msigdbr(species = "Homo sapiens", category = "H")
+
+cellcycle_sets <- msig_h %>%
+  filter(gs_name %in% c(
+    "HALLMARK_G2M_CHECKPOINT",
+    "HALLMARK_E2F_TARGETS"
+  )) %>%
+  select(gs_name, gene_symbol)
+
+enrich_cellcycle <- enricher(
+  gene = foxm1_in_network,
+  universe = background_genes,
+  TERM2GENE = cellcycle_sets,
+  pAdjustMethod = "BH"
+)
+
+head(enrich_cellcycle)
+
+
+## Check DNA repair enrichment
+dna_repair_set <- msig_h %>%
+  filter(gs_name == "HALLMARK_DNA_REPAIR") %>%
+  select(gs_name, gene_symbol)
+
+enrich_dna <- enricher(
+  gene = foxm1_in_network,
+  universe = background_genes,
+  TERM2GENE = dna_repair_set,
+  pAdjustMethod = "BH"
+)
+
+head(enrich_dna)
+
+
+
+dotplot(ereact, showCategory = 10)
+dotplot(enrich_tf, showCategory = 10)
