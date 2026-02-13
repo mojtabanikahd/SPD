@@ -118,7 +118,8 @@ library("igraph")
 # create two complete precision matrix
 generate_reference_models <- function(number_of_nodes, number_of_samples,
                                       type="ScaleFree", density_of_graph = 0.2,
-                                      power = 1, number_of_changes, mult=1)
+                                      power = 1, number_of_changes, mult=1,
+                                      change_type="Random")
 {
   #######################################
   ########### Generate Model ############
@@ -144,13 +145,22 @@ generate_reference_models <- function(number_of_nodes, number_of_samples,
   
   change_mask <- matrix(data = 0, nrow = number_of_nodes,
                         ncol = number_of_nodes)
-  indices <- 1:choose(number_of_nodes,2)
-  change_mask[lower.tri(change_mask)] <- indices
-  change_mask <- t(change_mask)
-  change_mask[lower.tri(change_mask)] <- indices
-  mask <- sample(indices,number_of_changes)
-  change_mask[change_mask %in% mask] <- -1
-  change_mask[change_mask != -1] <- 0
+  if(change_type == "Random") {
+    indices <- 1:choose(number_of_nodes,2)
+    change_mask[lower.tri(change_mask)] <- indices
+    change_mask <- t(change_mask)
+    change_mask[lower.tri(change_mask)] <- indices
+    mask <- sample(indices,number_of_changes)
+    change_mask[change_mask %in% mask] <- -1
+    change_mask[change_mask != -1] <- 0
+  } else if(change_type == "Hub") {
+    index_hub <- sample(1:number_of_nodes,1)
+    index_leaf <- sample(setdiff(1:number_of_nodes, index_hub), number_of_changes)
+    change_mask[index_hub, index_leaf] <- -1
+    change_mask[index_leaf, index_hub] <- -1
+  } else {
+    errorCondition(message = "The change_type value is not standard!")
+  }
   # create structure
   if(type == "ScaleFree") {
     g <- barabasi.game(number_of_nodes, power, directed = F);
@@ -292,4 +302,141 @@ aggregate_dtrace_solution_path_resuts <- function(number_of_repetition,
   colnames(mean_dtrace_solution_path_performances) <- colnames(dtrace_solution_path_performances[[1]])
   mean_dtrace_solution_path_performances <- head(mean_dtrace_solution_path_performances,-1)
   mean_dtrace_solution_path_performances
+}
+
+compute_gamma_submatrix <- function(pre_active_set_indices, CA, CB, nVar){
+  # Pre-allocate the symmetric matrix g
+  active_set_size = length(pre_active_set_indices)
+  g <- matrix(0, nrow = active_set_size, ncol = active_set_size)
+  
+  for (i in 1:active_set_size) {
+    # Get the value for the current row from the list
+    # Using double brackets [[ ]] to access list elements by index
+    current_index_val <- pre_active_set_indices[i]
+    
+    # Calculate the 2D coordinates for the current element (for the row)
+    columnA_current <- floor((current_index_val) / nVar) + 1 # R indices start at 1
+    columnB_current <- ((current_index_val) %% nVar) + 1      # R indices start at 1
+    
+    # Iterate for the columns (like the inner iterator 'it')
+    for (j in 1:active_set_size) {
+      # Get the value for the current column from the list
+      inner_index_val <- pre_active_set_indices[j]
+      
+      # Calculate the 2D coordinates for the inner element (for the column)
+      rowA_inner <- floor((inner_index_val) / nVar) + 1
+      rowB_inner <- ((inner_index_val) %% nVar) + 1
+      
+      # Perform the calculation
+      # Note: R uses [row, column] indexing for matrices
+      val <- CA[rowA_inner, columnA_current] * CB[rowB_inner, columnB_current] + 
+        CB[rowA_inner, columnA_current] * CA[rowB_inner, columnB_current]
+      
+      # Assign the value to the matrix
+      g[i, j] <- val
+    }
+  }
+  
+  return(g)
+}
+
+
+find_max_index <- function(sp, lambda) {
+  low <- 1
+  high <- length(sp)
+  
+  # Edge cases
+  if (high == 0)  # Empty list
+    stop("Error: List is empty!")
+  if (sp[[1]]$knots_lambdas <= lambda) return(0)  # No element satisfies condition
+  if (sp[[high]]$knots_lambdas > lambda) return(NULL)  # All elements satisfy condition
+
+  # Binary search
+  while (low <= high) {
+    mid <- floor((low + high) / 2)
+    
+    if (sp[[mid]]$knots_lambdas > lambda) {
+      # Check if this is the last element that satisfies the condition
+      if (mid == high || sp[[mid + 1]]$knots_lambdas <= lambda) {
+        return(mid)
+      } else {
+        low <- mid + 1
+      }
+    } else {
+      high <- mid - 1
+    }
+  }
+  
+  return(0)  # Not found
+}
+
+library("Matrix")
+get_knot_matrix <- function(i, sp, dim, eps=1e-12) {
+  row_indices <- NULL
+  column_indices <- NULL
+  values <- NULL
+  m <- NULL
+  
+  if (i == 1) {
+    m = Matrix(0, dim, dim, sparse = TRUE)
+  } else {
+    active_set_values = sp[[i]]$active_set_values
+    active_set_values[abs(active_set_values) < eps] = 0
+    active_set = sp[[i-1]]$active_set
+    active_set_size = length(active_set_values)
+    
+    for (j in 1:active_set_size) {
+      # Get the value for the current column from the list
+      index_val <- active_set[j]
+      val <- active_set_values[j]
+      
+      # Calculate the 2D coordinates for the inner element (for the column)
+      row_idx <- floor((index_val) / dim) + 1
+      column_idx <- ((index_val) %% dim) + 1
+      
+      row_indices <- c(row_indices, row_idx)
+      column_indices <- c(column_indices, column_idx)
+      values <- c(values, val)
+    }
+    m = sparseMatrix(i = row_indices, j = column_indices, x = values, dims = c(dim, dim))
+  }
+  m
+}
+
+get_estimated_delta <- function(sp, lambda, dim) {
+  i = find_max_index(sp, lambda)
+  
+  if (is.null(i)) return(NULL)
+  if (i == 0) {
+    Matrix(0, dim, dim, sparse = TRUE)
+  } else {
+    delta_knot_pre = get_knot_matrix(i, sp, dim)
+    lambda_knot_pre = sp[[i]]$knots_lambdas
+    delta_knot_past = get_knot_matrix(i+1, sp, dim)
+    lambda_knot_past = sp[[i+1]]$knots_lambdas
+    
+    knot_pre_weight = (lambda - lambda_knot_past)/(lambda_knot_pre - lambda_knot_past)
+    estimated_delta = (1-knot_pre_weight)*delta_knot_past + knot_pre_weight*delta_knot_pre
+    estimated_delta
+  }
+}
+
+get_obj_value <- function(delta, covA, covB, lambda) {
+  if (is.null(delta)) return(NA)
+  ( sum(diag(covA%*%delta%*%covB%*%delta)) + sum(diag(covB%*%delta%*%covA%*%delta))) / 4 -
+    sum(diag(delta%*%(covA-covB))) +
+    lambda*sum(abs(delta))
+}
+
+get_norm1_residuals <- function(delta, covA, covB, lambda) {
+  if (is.null(delta)) return(NA)
+  delta = as.matrix(delta)
+  derivatives = (covA%*%delta%*%covB + covB%*%delta%*%covA)/2 + (covB-covA)
+  residuals_matrix = matrix(NA, nrow = nrow(derivatives), ncol = ncol(derivatives))
+  
+  zero_ind = delta == 0
+  residuals_matrix[!zero_ind] = abs(derivatives[!zero_ind] + 
+                                         lambda*sign(delta[!zero_ind]))
+  residuals_matrix[zero_ind] = pmax(abs(derivatives[zero_ind])-lambda, 0)
+  sum(abs(residuals_matrix))
 }
