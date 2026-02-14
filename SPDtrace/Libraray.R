@@ -22,19 +22,22 @@ positive_semi_definite_maker <- function(A) {
 ## The random_set_ratio arguments contorols the ratio of samples incorporated in estimation.
 ## It is used in validation step for parameter tuning.
 weighted_rank_based_pearson_correlation_estimator <- function(datasets, random_set_ratio=1) {
-  number_of_all_cases <- sum(unlist(lapply(datasets, nrow)))
   number_of_nodes <- ncol(datasets[[1]])
-  empirical_kendall <- matrix(data = 0, nrow = number_of_nodes, ncol = number_of_nodes)
-  
+  empirical_kendall <- list()
+  w <- NULL
   for(p in 1:length(datasets)) {
-    number_of_samples <- nrow(datasets[[p]])
+    w <- c(w, nrow(datasets[[p]]))
     # Create random sub set of samples
     indices <- sample(1:number_of_samples, size = random_set_ratio*number_of_samples, replace = F)
     # Estimate empirical kendall's tau using weighted mean of empirical kandall's tau of datasets
-    empirical_kendall <- empirical_kendall +
-      (number_of_samples/number_of_all_cases)*cor(datasets[[p]][indices,], method = "kendall");
+    empirical_kendall[[p]] <- cor(datasets[[p]][indices,], method = "kendall");
   }
-  empirical_pearson = kendall_tau_matrix_to_pearson_correlation_matrix(empirical_kendall)
+  mat_array <- array(unlist(empirical_kendall), dim = c(number_of_nodes,
+                                                        number_of_nodes, 
+                                                        length(empirical_kendall)))
+  weighted_mean_empirical_kendall <- apply(mat_array, c(1,2), 
+                                           function(x) weighted.mean(x, w, na.rm = TRUE))
+  empirical_pearson = kendall_tau_matrix_to_pearson_correlation_matrix(weighted_mean_empirical_kendall)
   # make it positive semi definite
   empirical_pearson <- positive_semi_definite_maker(empirical_pearson)
   empirical_pearson
