@@ -31,7 +31,9 @@ weighted_rank_based_pearson_correlation_estimator <- function(datasets, random_s
     # Create random sub set of samples
     indices <- sample(1:number_of_samples, size = random_set_ratio*number_of_samples, replace = F)
     # Estimate empirical kendall's tau using weighted mean of empirical kandall's tau of datasets
-    empirical_kendall[[p]] <- cor(datasets[[p]][indices,], method = "kendall");
+    empirical_kendall[[p]] <- cor(datasets[[p]][indices,],
+                                  method = "kendall",
+                                  use = "pairwise.complete.obs");
   }
   mat_array <- array(unlist(empirical_kendall), dim = c(number_of_nodes,
                                                         number_of_nodes, 
