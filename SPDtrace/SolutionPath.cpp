@@ -1,8 +1,25 @@
+#include <windows.h>
+#include <psapi.h>
+#pragma comment(lib, "psapi.lib")
+
 #include <RcppArmadillo.h>
 #include <List>
 #include <cmath>
 
 using namespace Rcpp;
+
+SIZE_T getPeakRSS() {
+  PROCESS_MEMORY_COUNTERS info;
+  GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
+  return info.PeakWorkingSetSize; // in bytes
+}
+
+SIZE_T getCurrentRSS() {
+  PROCESS_MEMORY_COUNTERS info;
+  GetProcessMemoryInfo(GetCurrentProcess(), &info, sizeof(info));
+  return info.WorkingSetSize; // current RSS in bytes
+}
+
 
 bool AreSame(double a, double b, double EPSILON=0.00000001) {
   return fabs(a - b) < EPSILON;
@@ -12,6 +29,9 @@ bool AreSame(double a, double b, double EPSILON=0.00000001) {
 // [[Rcpp::depends(RcppArmadillo)]]
 // [[Rcpp::export]]
 List inference_Dtrace_solution_path(NumericMatrix CovA, NumericMatrix CovB, int sparsityLevel) {
+  SIZE_T baseline = getCurrentRSS();
+  SIZE_T peak = baseline;
+  
   int nrow = CovA.nrow(), ncol = CovA.ncol(), nVar = CovA.ncol();
   // Define int iterator
   std::list<int>::iterator it;
@@ -325,6 +345,10 @@ List inference_Dtrace_solution_path(NumericMatrix CovA, NumericMatrix CovB, int 
       
       RsolutionPathList.push_back(Rknot);
       
+      SIZE_T current = getCurrentRSS();
+      if (current > peak)
+        peak = current;
+      
       // Release the memory
       delete [] IKADA;
     }
@@ -341,6 +365,9 @@ List inference_Dtrace_solution_path(NumericMatrix CovA, NumericMatrix CovB, int 
     delete [] CB[i];
   }
   delete [] CB;
+  
+  double peak_MB = (double)(peak - baseline) / (1024.0 * 1024.0);
+  Rresults["peak_MB"] = peak_MB;
   
   Rresults["solution_path"] = RsolutionPathList;
   return Rresults;
