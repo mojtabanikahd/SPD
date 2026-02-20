@@ -86,15 +86,23 @@ for(setting_index in 1:nrow(settings)) {
     
     # Differential Network Learning
     # Inference Using Solution Path Method
-    dtrace_solution_path_mem <- peakRAM({
-      dtrace_solution_path_start_time <- Sys.time()
-      dtrace_solution_path_results <- inference_Dtrace_solution_path(sample_covariances[[1]], sample_covariances[[2]],
-                                                                     maximum_legal_sparsity_in_solution_path)
-      dtrace_solution_path_stop_time <- Sys.time()
-    })
-    dtrace_solution_path_mem_total_mb <- dtrace_solution_path_mem$Peak_RAM_Used_MiB
+    sample_pearson_A = reference$covariance_matrix_A
+    sample_pearson_B = reference$covariance_matrix_B
     
-    dtrace_solution_path_time <- dtrace_solution_path_stop_time - dtrace_solution_path_start_time
+    save(sample_pearson_A,
+         sample_pearson_B,
+         maximum_legal_sparsity_in_solution_path,
+         file = "./Simulation/Data/temp_input.RData")
+    system("Rscript ./Simulation/solution_path_Rscript.R")
+    # dtrace_solution_path_mem <- peakRAM({
+    #   dtrace_solution_path_start_time <- Sys.time()
+    #   dtrace_solution_path_results <- inference_Dtrace_solution_path(sample_covariances[[1]], sample_covariances[[2]],
+    #                                                                  maximum_legal_sparsity_in_solution_path)
+    #   dtrace_solution_path_stop_time <- Sys.time()
+    # })
+    # dtrace_solution_path_time <- dtrace_solution_path_stop_time - dtrace_solution_path_start_time
+    load("./Simulation/Data/temp_output.RData")
+    dtrace_solution_path_mem_total_mb <- dtrace_solution_path_results$peak_MB;
     dtrace_solution_path_times[k] <- as.numeric(dtrace_solution_path_time);
     dtrace_solution_path_performances[[k]] <- solution_path_performance_evaluator(solution_path = dtrace_solution_path_results,
                                                                                   differential_structure = differential_structure)
@@ -728,5 +736,5 @@ final_plot_resource <- ggarrange(mem_plot, best_time_plot,
           # legend="bottom",
           labels = c("A", "B"),
           ncol = 2, nrow = 1, widths = c(1,1))
-
+print(final_plot_resource)
 ggsave("./Simulation/Results/exact_approx_resource.pdf", plot = final_plot_resource, width = 12, height = 4)
