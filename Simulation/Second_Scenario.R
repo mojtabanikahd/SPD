@@ -1,7 +1,7 @@
 rm(list = ls())
 #Set working directory
-source('../SPDtrace/Libraray.R')
-Rcpp::sourceCpp('../SPDtrace/SolutionPath.cpp')
+source('./SPDtrace/Libraray.R')
+Rcpp::sourceCpp('./SPDtrace/SolutionPath.cpp')
 library(ggplot2)
 
 
