@@ -9,7 +9,7 @@ library(ggplot2)
 ######## performance comparision in multi-source setting (multi-source)
 set.seed(1)
 number_of_nodes_items = c(50)
-number_of_changes_items = c(20, 10, 5)
+number_of_changes_items = c(20)
 number_of_tuning_parameters_items = c(20);
 maximum_legal_sparsity_in_solution_path_items = c(200);
 number_of_samples_items = c(200)
@@ -33,6 +33,7 @@ setting_results <- list();
 
 
 for(setting_index in 1:nrow(settings)){
+  print(paste("setting index: ", setting_index, " of ", nrow(settings)))
 
   number_of_nodes = settings$number_of_nodes_items[setting_index]
   number_of_changes = settings$number_of_changes_items[setting_index]
@@ -55,6 +56,7 @@ for(setting_index in 1:nrow(settings)){
       type = "ScaleFree",
       number_of_changes = number_of_changes
     )
+    print(paste("Repetition number: (", setting_index, " : ", k, ")"))
     
     model_precision_A = reference$precision_matrix_A
     model_precision_B = reference$precision_matrix_B
@@ -202,7 +204,6 @@ specific_control_index <- (performances$c == as.numeric(v[2]))
 SPD_index <- (performances$type %in% c("Single View", "Overal View", "Integrated View"))
 row_index <- specific_change_index & specific_control_index & SPD_index
 
-pdf(file = "./Results/Multi_View/precision_vs_recall.pdf", width = 5.5, height = 3)
 p <- ggplot(performances[row_index,], aes(x = NRecall, y = NPrecision, color=type))+
   geom_line(size = 0.5) +
   labs(y="Precision", x="Recall") +
@@ -215,5 +216,27 @@ p <- ggplot(performances[row_index,], aes(x = NRecall, y = NPrecision, color=typ
         panel.grid.minor = element_blank(),
         # remove the facet background
         strip.background = element_blank())
-print(p)
-dev.off()
+ggsave("./Simulation/Results/Multi_View/precision_vs_recall.pdf",
+       plot = p, width = 5.5,
+       height = 3)
+
+
+# Compute PR-AUC for each view
+view_types <- c("Single View", "Overal View", "Integrated View")
+auc_results <- data.frame(View = view_types, AUC = NA)
+
+for (i in seq_along(view_types)) {
+  view_data <- performances[row_index & performances$type == view_types[i], ]
+  view_data <- view_data[order(view_data$NRecall), ]
+  if (nrow(view_data) < 2) next
+  recall <- view_data$NRecall
+  precision <- view_data$NPrecision
+  precision[1] <- 1
+  auc <- 0
+  for (j in 2:nrow(view_data)) {
+    auc <- auc + (recall[j] - recall[j-1]) * (precision[j] + precision[j-1]) / 2
+  }
+  auc_results$AUC[i] <- auc
+}
+
+print(auc_results)
